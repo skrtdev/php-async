@@ -1,4 +1,5 @@
 <?php
+declare(strict_types=1);
 
 namespace skrtdev\async;
 
@@ -23,15 +24,18 @@ function breakpoint($value){
 
 class Pool{
 
-    protected int $max_childs = 50;
+    protected int $max_childs;
     protected array $childs = [];
     protected array $queue = [];
     protected int $pid;
+    public static ?int $cores_count = null;
 
 
-    public function __construct()
+    public function __construct(?int $max_childs = null)
     {
         $this->pid = getmypid();
+        $max_childs ??= (self::getCoresCount() ?? 1) * 50;
+        $this->max_childs = $max_childs;
     }
 
     public function checkChilds()
@@ -161,6 +165,36 @@ class Pool{
                 $this->checkChilds();
             }
         }
+    }
+
+    public static function getCoresCount()
+    {
+        if(isset(self::$cores_count)) return self::$cores_count;
+
+        if (defined('PHP_WINDOWS_VERSION_MAJOR')){
+    		$str = trim(shell_exec('wmic cpu get NumberOfCores 2>&1'));
+    		if (!preg_match('/(\d+)/', $str, $matches)) {
+    			$cores_count = null;
+    		}
+    		$cores_count = (int) $matches[1];
+    	}
+    	$ret = @shell_exec('nproc 2> /dev/null');
+    	if (is_string($ret)) {
+    		$ret = trim($ret);
+    		if (false !== ($tmp = filter_var($ret, FILTER_VALIDATE_INT))){
+    			$cores_count = $tmp;
+    		}
+    	}
+    	if (is_readable('/proc/cpuinfo 2> /dev/null')) {
+    		$cpuinfo = file_get_contents('/proc/cpuinfo');
+    		$count = substr_count($cpuinfo, 'processor');
+    		if ($count > 0) {
+    			$cores_count = $count;
+    		}
+    	}
+
+        self::$cores_count = $cores_count ?? null;
+        return self::$cores_count;
     }
 }
 
