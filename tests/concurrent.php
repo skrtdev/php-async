@@ -1,12 +1,13 @@
 <?php
 
 error_reporting(E_ALL);
+declare(ticks=1);
 
 require '../vendor/autoload.php';
 
 use skrtdev\async\Pool;
 
-$pool = new Pool();
+$pool = new Pool(10);
 
 for ($i=0; $i < 100; $i++) {
     $pool->parallel(function () use ($i) {
@@ -17,6 +18,7 @@ for ($i=0; $i < 100; $i++) {
 
 print("OUT OF FOR".PHP_EOL.PHP_EOL);
 
+exit;
 sleep(5);
 var_dump($pool);
 var_dump(Pool::$cores_count);
