@@ -18,6 +18,17 @@ for ($i=0; $i < 100; $i++) {
 
 print("OUT OF FOR".PHP_EOL.PHP_EOL);
 
+function some_work()
+{
+    usleep(1000);
+}
+
+print("Doing some external work...".PHP_EOL);
+for ($i=0; $i < 10000; $i++) {
+    #print("SHOULD TICK".PHP_EOL);
+    some_work();
+}
+print("External work finished...".PHP_EOL);
 exit;
 sleep(5);
 var_dump($pool);

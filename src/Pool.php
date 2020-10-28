@@ -1,6 +1,6 @@
 <?php
 declare(strict_types=1);
-#declare(ticks=10);
+#declare(ticks=1);
 
 namespace skrtdev\async;
 
@@ -14,6 +14,9 @@ class Pool{
     protected int $pid;
     public static ?int $cores_count = null;
     protected static int $last_tick = 0;
+    private bool $is_parent = true;
+    private bool $is_resolving_queue = false;
+    private bool $need_tick = true;
 
 
     public function __construct(?int $max_childs = null)
@@ -21,8 +24,7 @@ class Pool{
         $this->pid = getmypid();
         $max_childs ??= (self::getCoresCount() ?? 1) * 50;
         $this->max_childs = $max_childs;
-        #register_tick_function([$this, "resolveQueue"]);
-        #register_tick_function([__CLASS__, "tick"]);
+        register_tick_function([$this, "tick"]);
     }
 
     public function checkChilds()
@@ -52,18 +54,11 @@ class Pool{
 
     public function enqueue(Closure $closure = null, array $args): void
     {
-        $this->queue[] = function () use ($closure, $args) {
+        $this->queue[] = fn() => $closure($args);
+        /*$this->queue[] = function () use ($closure, $args) {
             return $closure($args);
-        };
+        };*/
         // TODO enqueue args
-        #print(PHP_EOL.PHP_EOL."BELLA LA CODA".PHP_EOL.PHP_EOL);
-        /*
-        self::breakpoint("check childs from enqueue");
-        if($this->checkChilds()){
-            self::breakpoint("resolveQueue from enqueue (cause checkChilds is succesful)");
-            $this->resolveQueue();
-        }
-        */
     }
 
     public function internalParallel(){
@@ -77,6 +72,7 @@ class Pool{
         }
         else{
             // we are the child
+            $this->is_parent = false;
             exit;
         }
     }
@@ -97,7 +93,7 @@ class Pool{
         }
         else{
             // we are the child
-            $pid = getmypid();
+            $this->is_parent = false;
             $closure($args);
             exit;
         }
@@ -127,6 +123,9 @@ class Pool{
 
     public function resolveQueue()
     {
+        if($this->is_resolving_queue) return;
+        $this->is_resolving_queue = true;
+
         if(count($this->childs) >= $this->max_childs){
             self::breakpoint("resolveQueue() -> too many childs, trying to remove...");
             self::breakpoint("check childs from resolveQueue()");
@@ -149,13 +148,16 @@ class Pool{
         if(empty($this->queue)){
             self::breakpoint("queue is empty");
         }
+
+        $this->is_resolving_queue = false;
         return empty($this->queue);
 
     }
 
     public function __destruct()
     {
-        if($this->pid === getmypid()){
+        if($this->is_parent){
+            $this->need_tick = false;
             self::breakpoint("triggered destructor");
             while(!empty($this->queue)){
                 self::breakpoint("queue is not empty");
@@ -208,11 +210,12 @@ class Pool{
         return posix_getpgid($pid);
     }
 
-    public static function tick($value='')
+    public function tick()
     {
-        if(self::$last_tick !== time()){
-            print("tick".PHP_EOL);
+        if($this->is_parent && $this->need_tick && self::$last_tick !== time()){
+            #print("tick".PHP_EOL);
             self::$last_tick = time();
+            if(!$this->is_resolving_queue) $this->resolveQueue();
         }
     }
 }
