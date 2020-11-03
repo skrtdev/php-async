@@ -162,10 +162,12 @@ class Pool{
             while(!empty($this->queue)){
                 self::breakpoint("queue is not empty");
                 $this->resolveQueue();
+                sleep(1);
             }
             while(!empty($this->childs)){
                 self::breakpoint("there are still childs");
                 $this->checkChilds();
+                sleep(1);
             }
         }
     }
