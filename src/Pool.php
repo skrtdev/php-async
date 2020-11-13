@@ -18,13 +18,22 @@ class Pool{
     private bool $is_resolving_queue = false;
     private bool $need_tick = true;
 
-
     public function __construct(?int $max_childs = null)
     {
         $this->pid = getmypid();
         $max_childs ??= (self::getCoresCount() ?? 1) * 50;
         $this->max_childs = $max_childs;
+
         register_tick_function([$this, "tick"]);
+        pcntl_signal(SIGCHLD, SIG_IGN); // ignores the SIGCHLD signal
+        #pcntl_signal(SIGCHLD, [__CLASS__, "SIGCHLD"]);
+    }
+
+    public static function SIGCHLD(int $signo)
+    {
+        #var_dump(pcntl_wifexited($signo));
+        #var_dump("SIGNAL $signo ".self::$count);
+        pcntl_wait($status, WNOHANG | WUNTRACED);
     }
 
     public function checkChilds()
