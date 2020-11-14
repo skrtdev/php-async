@@ -26,14 +26,6 @@ class Pool{
 
         register_tick_function([$this, "tick"]);
         pcntl_signal(SIGCHLD, SIG_IGN); // ignores the SIGCHLD signal
-        #pcntl_signal(SIGCHLD, [__CLASS__, "SIGCHLD"]);
-    }
-
-    public static function SIGCHLD(int $signo)
-    {
-        #var_dump(pcntl_wifexited($signo));
-        #var_dump("SIGNAL $signo ".self::$count);
-        pcntl_wait($status, WNOHANG | WUNTRACED);
     }
 
     public function checkChilds()
@@ -46,14 +38,15 @@ class Pool{
                 self::breakpoint("Removed child n. $key");
                 $removed = true;
             }
-            else{
+            /*else{
                 $this->internalParallel();
                 if(!self::isProcessRunning($child)){
                     unset($this->childs[$key]);
                     self::breakpoint("Removed child n. $key from retrying");
                     $removed = true;
                 }
-            }
+
+            }*/
         }
         if(!$removed){
             self::breakpoint("CheckChilds didn't remove any child");
@@ -61,15 +54,12 @@ class Pool{
         return $removed;
     }
 
-    public function enqueue(Closure $closure = null, array $args): void
+    public function enqueue(Closure $closure, array $args): void
     {
         $this->queue[] = fn() => $closure($args);
-        /*$this->queue[] = function () use ($closure, $args) {
-            return $closure($args);
-        };*/
         // TODO enqueue args
     }
-
+/*
     public function internalParallel(){
         $pid = pcntl_fork();
         if ($pid == -1) {
@@ -85,7 +75,7 @@ class Pool{
             exit;
         }
     }
-
+*/
     protected function _parallel(Closure $closure, ...$args)
     {
         self::breakpoint("started a parallel");
@@ -171,12 +161,12 @@ class Pool{
             while(!empty($this->queue)){
                 self::breakpoint("queue is not empty");
                 $this->resolveQueue();
-                sleep(1);
+                usleep(10000);
             }
             while(!empty($this->childs)){
                 self::breakpoint("there are still childs");
                 $this->checkChilds();
-                sleep(1);
+                usleep(10000);
             }
         }
     }
@@ -213,7 +203,7 @@ class Pool{
 
     public static function breakpoint($value){
         return;
-        usleep(50000);
+        usleep(20000);
         print($value.PHP_EOL);
     }
 
