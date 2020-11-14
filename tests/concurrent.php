@@ -1,7 +1,7 @@
 <?php
 
 error_reporting(E_ALL);
-declare(ticks=1);
+declare(ticks=1); // IN THIS CASE THIS IS NECESSARY
 
 require '../vendor/autoload.php';
 
