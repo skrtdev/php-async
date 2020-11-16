@@ -158,12 +158,12 @@ class Pool{
         if($this->is_parent){
             $this->need_tick = false;
             self::breakpoint("triggered destructor");
-            while(!empty($this->queue)){
+            while($this->hasQueue()){
                 self::breakpoint("queue is not empty");
                 $this->resolveQueue();
                 usleep(10000);
             }
-            while(!empty($this->childs)){
+            while($this->hasChilds()){
                 self::breakpoint("there are still childs");
                 $this->checkChilds();
                 usleep(10000);
@@ -171,7 +171,7 @@ class Pool{
         }
     }
 
-    public static function getCoresCount()
+    public static function getCoresCount(): ?int
     {
         if(isset(self::$cores_count)) return self::$cores_count;
 
@@ -207,8 +207,9 @@ class Pool{
         print($value.PHP_EOL);
     }
 
-    public static function isProcessRunning($pid) {
-        return posix_getpgid($pid);
+    public static function isProcessRunning($pid): bool
+    {
+        return posix_getpgid($pid) !== false;
     }
 
     public function tick()
@@ -217,6 +218,34 @@ class Pool{
             #print("tick".PHP_EOL);
             self::$last_tick = time();
             if(!$this->is_resolving_queue) $this->resolveQueue();
+        }
+    }
+
+    public function hasQueue(): bool
+    {
+        return !empty($this->queue);
+    }
+
+    public function hasChilds(): bool
+    {
+        return !empty($this->childs);
+    }
+
+    public function waitQueue(): void
+    {
+        while($this->hasQueue()){
+            self::breakpoint("queue is not empty");
+            $this->resolveQueue();
+            usleep(10000);
+        }
+    }
+
+    public function waitChilds(): void
+    {
+        while($this->hasChilds()){
+            self::breakpoint("there are still childs");
+            $this->checkChilds();
+            usleep(10000);
         }
     }
 }
