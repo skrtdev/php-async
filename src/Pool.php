@@ -20,6 +20,9 @@ class Pool{
 
     public function __construct(?int $max_childs = null)
     {
+        if(!extension_loaded("pcntl")){
+            throw new \Error("PCNTL Extension is missing in your PHP build");
+        }
         $this->pid = getmypid();
         $max_childs ??= (self::getCoresCount() ?? 1) * 50;
         $this->max_childs = $max_childs;
@@ -38,15 +41,6 @@ class Pool{
                 self::breakpoint("Removed child n. $key");
                 $removed = true;
             }
-            /*else{
-                $this->internalParallel();
-                if(!self::isProcessRunning($child)){
-                    unset($this->childs[$key]);
-                    self::breakpoint("Removed child n. $key from retrying");
-                    $removed = true;
-                }
-
-            }*/
         }
         if(!$removed){
             self::breakpoint("CheckChilds didn't remove any child");
@@ -59,23 +53,7 @@ class Pool{
         $this->queue[] = fn() => $closure($args);
         // TODO enqueue args
     }
-/*
-    public function internalParallel(){
-        $pid = pcntl_fork();
-        if ($pid == -1) {
-            die('could not fork');
-        }
-        elseif($pid){
-            // we are the parent
-            pcntl_wait($status, WNOHANG);
-        }
-        else{
-            // we are the child
-            $this->is_parent = false;
-            exit;
-        }
-    }
-*/
+
     protected function _parallel(Closure $closure, ...$args)
     {
         self::breakpoint("started a parallel");
