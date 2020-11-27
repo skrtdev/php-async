@@ -21,7 +21,7 @@ class Pool{
     public function __construct(?int $max_childs = null)
     {
         if(!extension_loaded("pcntl")){
-            throw new \Error("PCNTL Extension is missing in your PHP build");
+            throw new MissingExtensionException("PCNTL Extension is missing in your PHP build");
         }
         $this->pid = getmypid();
         $max_childs ??= (self::getCoresCount() ?? 1) * 50;
@@ -34,18 +34,21 @@ class Pool{
     public function checkChilds()
     {
         self::breakpoint("checkChilds()");
-        $removed = false;
+        $removed = 0;
         foreach ($this->childs as $key => $child) {
             if(!self::isProcessRunning($child)){
                 unset($this->childs[$key]);
-                self::breakpoint("Removed child n. $key");
-                $removed = true;
+                $removed++;
             }
         }
-        if(!$removed){
+        if($removed === 0){
             self::breakpoint("CheckChilds didn't remove any child");
+            return false;
         }
-        return $removed;
+        else{
+            self::breakpoint("CheckChilds removed $removed childs");
+            return true;
+        };
     }
 
     public function enqueue(Closure $closure, array $args): void
@@ -60,7 +63,7 @@ class Pool{
         self::breakpoint("parallel can be done: current childs: ".count($this->childs)."/".$this->max_childs);
         $pid = pcntl_fork();
         if ($pid == -1) {
-            die('could not fork');
+            throw new CouldNotForkException("Pool could not fork");
         }
         elseif($pid){
             // we are the parent
@@ -71,6 +74,7 @@ class Pool{
         else{
             // we are the child
             $this->is_parent = false;
+            pcntl_signal(SIGINT, SIG_IGN);
             $closure($args);
             exit;
         }
@@ -92,7 +96,7 @@ class Pool{
                 return $this->enqueue($closure, $args);
             }
         }
-        elseif(count($this->childs) > 1){
+        elseif(count($this->childs) > $this->max_childs/2){
             $this->checkChilds();
         }
         return $this->_parallel($closure, ...$args);
@@ -136,16 +140,7 @@ class Pool{
         if($this->is_parent){
             $this->need_tick = false;
             self::breakpoint("triggered destructor");
-            while($this->hasQueue()){
-                self::breakpoint("queue is not empty");
-                $this->resolveQueue();
-                usleep(10000);
-            }
-            while($this->hasChilds()){
-                self::breakpoint("there are still childs");
-                $this->checkChilds();
-                usleep(10000);
-            }
+            $this->wait();
         }
     }
 
@@ -181,7 +176,7 @@ class Pool{
 
     public static function breakpoint($value){
         return;
-        usleep(20000);
+        usleep(5000);
         print($value.PHP_EOL);
     }
 
@@ -225,6 +220,12 @@ class Pool{
             $this->checkChilds();
             usleep(10000);
         }
+    }
+
+    public function wait(): void
+    {
+        $this->waitQueue();
+        $this->waitChilds();
     }
 }
 
