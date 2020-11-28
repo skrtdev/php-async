@@ -9,6 +9,7 @@ use Closure;
 class Pool{
 
     protected int $max_childs;
+    protected bool $kill_childs;
     protected array $childs = [];
     protected array $queue = [];
     protected int $pid;
@@ -18,7 +19,7 @@ class Pool{
     private bool $is_resolving_queue = false;
     private bool $need_tick = true;
 
-    public function __construct(?int $max_childs = null)
+    public function __construct(?int $max_childs = null, bool $kill_childs = true)
     {
         if(!extension_loaded("pcntl")){
             throw new MissingExtensionException("PCNTL Extension is missing in your PHP build");
@@ -26,6 +27,7 @@ class Pool{
         $this->pid = getmypid();
         $max_childs ??= (self::getCoresCount() ?? 1) * 50;
         $this->max_childs = $max_childs;
+        $this->kill_childs = $kill_childs;
 
         register_tick_function([$this, "tick"]);
         pcntl_signal(SIGCHLD, SIG_IGN); // ignores the SIGCHLD signal
@@ -74,7 +76,9 @@ class Pool{
         else{
             // we are the child
             $this->is_parent = false;
-            pcntl_signal(SIGINT, SIG_IGN);
+            if (!$this->kill_childs) {
+                pcntl_signal(SIGINT, SIG_IGN);
+            }
             $closure($args);
             exit;
         }
