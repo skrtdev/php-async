@@ -59,7 +59,7 @@ class Pool{
         // TODO enqueue args
     }
 
-    protected function _parallel(Closure $closure, ...$args)
+    protected function _parallel(Closure $closure, string $process_title = null, ...$args)
     {
         self::breakpoint("started a parallel");
         self::breakpoint("parallel can be done: current childs: ".count($this->childs)."/".$this->max_childs);
@@ -79,12 +79,15 @@ class Pool{
             if (!$this->kill_childs) {
                 pcntl_signal(SIGINT, SIG_IGN);
             }
+            if(isset($process_title)){
+                @cli_set_process_title($process_title);
+            }
             $closure($args);
             exit;
         }
     }
 
-    public function parallel(Closure $closure, ...$args)
+    public function parallel(Closure $closure, string $process_title = null, ...$args)
     {
         if(!empty($this->queue)){
             self::breakpoint("resolving queue before parallel()");
@@ -103,7 +106,7 @@ class Pool{
         elseif(count($this->childs) > $this->max_childs/2){
             $this->checkChilds();
         }
-        return $this->_parallel($closure, ...$args);
+        return $this->_parallel($closure, $process_title, ...$args);
     }
 
     public function resolveQueue()
