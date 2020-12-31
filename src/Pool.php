@@ -25,8 +25,7 @@ class Pool{
             throw new MissingExtensionException("PCNTL Extension is missing in your PHP build");
         }
         $this->pid = getmypid();
-        $max_childs ??= (self::getCoresCount() ?? 1) * 50;
-        $this->max_childs = $max_childs;
+        $this->max_childs = $max_childs ?? (self::getCoresCount() ?? 1) * 10;
         $this->kill_childs = $kill_childs;
 
         register_tick_function([$this, "tick"]);
@@ -153,7 +152,7 @@ class Pool{
 
     public static function getCoresCount(): ?int
     {
-        if(isset(self::$cores_count)) return self::$cores_count;
+        if(isset(self::$cores_count) && self::$cores_count === 0) return null;
 
         if (defined('PHP_WINDOWS_VERSION_MAJOR')){
     		$str = trim(shell_exec('wmic cpu get NumberOfCores 2>&1'));
@@ -177,8 +176,8 @@ class Pool{
     		}
     	}
 
-        self::$cores_count = $cores_count ?? null;
-        return self::$cores_count;
+        self::$cores_count = $cores_count ?? 0;
+        return $cores_count ?? null;
     }
 
     public static function breakpoint($value){
