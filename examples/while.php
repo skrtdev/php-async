@@ -1,11 +1,10 @@
-<?php
-declare(ticks=1);
+<?php declare(ticks=1);
 
 require '../vendor/autoload.php';
 
 use skrtdev\async\Pool;
 
-$pool = new Pool(100);
+$pool = new Pool();
 
 for ($i=0; $i < 10; $i++) {
     $pool->parallel(function () use ($i) {

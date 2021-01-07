@@ -1,37 +1,31 @@
-<?php
+<?php declare(ticks=1);
 
-error_reporting(E_ALL);
-declare(ticks=1); // IN THIS CASE THIS IS NECESSARY
+/**
+ * without ticks, this script won't
+ * continue to execute parallels
+ * when inside the for, it will
+ * only finish the pool by destructor
+ */
 
 require '../vendor/autoload.php';
 
 use skrtdev\async\Pool;
 
-$pool = new Pool(10);
+$pool = new Pool();
 
 for ($i=0; $i < 100; $i++) {
-    $pool->parallel(function () use ($i) {
+    $pool->parallel(function (int $i) {
         sleep(1);
         print("by the child n. $i".PHP_EOL);
-    });
+    }, "my nice process name", $i);
 }
 
-print("OUT OF FOR".PHP_EOL.PHP_EOL);
+print("Out of for, doing some external work...".PHP_EOL);
 
-function some_work()
-{
+for ($i=0; $i < 10000; $i++) {
     usleep(1000);
 }
 
-print("Doing some external work...".PHP_EOL);
-for ($i=0; $i < 10000; $i++) {
-    #print("SHOULD TICK".PHP_EOL);
-    some_work();
-}
 print("External work finished...".PHP_EOL);
-exit;
-sleep(5);
-var_dump($pool);
-var_dump(Pool::$cores_count);
-#var_dump($pool->$max_childs);
-sleep(1);
+
+// here destructor is fired, and it will internally call $pool->wait()
