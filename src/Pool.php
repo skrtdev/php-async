@@ -202,9 +202,19 @@ class Pool{
         return !empty($this->queue);
     }
 
+    public function getQueueLength(): int
+    {
+        return count($this->queue);
+    }
+
     public function hasChilds(): bool
     {
         return !empty($this->childs);
+    }
+
+    public function getChildsCount(): int
+    {
+        return count($this->childs);
     }
 
     public function waitQueue(): void
