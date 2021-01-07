@@ -1,6 +1,4 @@
-<?php
-declare(strict_types=1);
-#declare(ticks=1);
+<?php declare(strict_types=1);
 
 namespace skrtdev\async;
 
@@ -32,7 +30,7 @@ class Pool{
         pcntl_signal(SIGCHLD, SIG_IGN); // ignores the SIGCHLD signal
     }
 
-    public function checkChilds()
+    public function checkChilds(): bool
     {
         self::breakpoint("checkChilds()");
         $removed = 0;
@@ -52,13 +50,12 @@ class Pool{
         };
     }
 
-    public function enqueue(Closure $closure, array $args): void
+    public function enqueue(Closure $closure, string $process_title = null, array $args = []): void
     {
-        $this->queue[] = fn() => $closure($args);
-        // TODO enqueue args
+        $this->queue[] = [$closure, $process_title, $args];
     }
 
-    protected function _parallel(Closure $closure, string $process_title = null, ...$args)
+    protected function _parallel(Closure $closure, string $process_title = null, array $args = [])
     {
         self::breakpoint("started a parallel");
         self::breakpoint("parallel can be done: current childs: ".count($this->childs)."/".$this->max_childs);
@@ -81,49 +78,50 @@ class Pool{
             if(isset($process_title)){
                 @cli_set_process_title($process_title);
             }
-            $closure($args);
+            $closure(...$args);
             exit;
         }
     }
 
     public function parallel(Closure $closure, string $process_title = null, ...$args)
     {
-        if(!empty($this->queue)){
+        if(count($this->childs) > $this->max_childs/2){
+            $this->checkChilds();
+        }
+        if($this->hasQueue()){
             self::breakpoint("resolving queue before parallel()");
-            if(!$this->resolveQueue()){
+            $this->resolveQueue();
+            if($this->hasQueue()){
                 self::breakpoint("enqueueing because there is a queue");
-                return $this->enqueue($closure, $args);
+                return $this->enqueue($closure, $process_title, $args);
             }
-            return false;
         }
         elseif(count($this->childs) > $this->max_childs){
-            if(!$this->checkChilds()){
-                self::breakpoint("enqueueing because of max reached (tried checkChilds but no results)");
-                return $this->enqueue($closure, $args);
-            }
+            self::breakpoint("enqueueing because of max reached (tried checkChilds but no results)");
+            return $this->enqueue($closure, $process_title, $args);
         }
-        elseif(count($this->childs) > $this->max_childs/2){
-            $this->checkChilds();
-        }
-        return $this->_parallel($closure, $process_title, ...$args);
+        return $this->_parallel($closure, $process_title, $args);
     }
 
-    public function resolveQueue()
+    public function resolveQueue(): void
     {
         if($this->is_resolving_queue) return;
-        $this->is_resolving_queue = true;
 
         if(count($this->childs) >= $this->max_childs){
-            self::breakpoint("resolveQueue() -> too many childs, trying to remove...");
-            self::breakpoint("check childs from resolveQueue()");
-            $this->checkChilds();
+            self::breakpoint("resolveQueue() -> too many childs, trying to remove...".PHP_EOL."check childs from resolveQueue()");
+            if(!$this->checkChilds()){
+                self::breakpoint("resolveQueue() exited because of too many childs");
+                return;
+            }
         }
+
+        $this->is_resolving_queue = true;
 
         foreach ($this->queue as $key => $closure) {
             if(count($this->childs) < $this->max_childs){
                 unset($this->queue[$key]);
                 self::breakpoint("resolveQueue() is resolving n. $key");
-                if($this->_parallel($closure)) break;
+                $this->_parallel(...$closure);
             }
             else{
                 self::breakpoint("resolveQueue() can't resolve, too many childs");
@@ -137,7 +135,6 @@ class Pool{
         }
 
         $this->is_resolving_queue = false;
-        return empty($this->queue);
 
     }
 
