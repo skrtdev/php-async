@@ -27,11 +27,31 @@ class Pool{
         $this->kill_childs = $kill_childs;
 
         register_tick_function([$this, "tick"]);
-        pcntl_signal(SIGCHLD, SIG_IGN); // ignores the SIGCHLD signal
+        #pcntl_signal(SIGCHLD, SIG_IGN); // ignores the SIGCHLD signal
+
+        pcntl_async_signals(true);
+
+        pcntl_signal(SIGCHLD, function ($signo, $status) {
+            while (true) {
+                $pid = pcntl_waitpid(-1, $processState, WNOHANG | WUNTRACED);
+
+                if ($pid <= 0) {
+                    break;
+                }
+
+                foreach ($this->childs as $key => $child) {
+                    if($pid === $child){
+                        self::breakpoint("removed child from signal handler");
+                        unset($this->childs[$key]);
+                    }
+                }
+            }
+        });
     }
 
     public function checkChilds(): bool
     {
+        return false;
         self::breakpoint("checkChilds()");
         $removed = 0;
         foreach ($this->childs as $key => $child) {
@@ -86,7 +106,7 @@ class Pool{
     public function parallel(Closure $closure, string $process_title = null, ...$args)
     {
         if(count($this->childs) > $this->max_childs/2){
-            $this->checkChilds();
+            #$this->checkChilds();
         }
         if($this->hasQueue()){
             self::breakpoint("resolving queue before parallel()");
@@ -109,7 +129,7 @@ class Pool{
 
         if(count($this->childs) >= $this->max_childs){
             self::breakpoint("resolveQueue() -> too many childs, trying to remove...".PHP_EOL."check childs from resolveQueue()");
-            if(!$this->checkChilds()){
+            if(true || !$this->checkChilds()){
                 self::breakpoint("resolveQueue() exited because of too many childs");
                 return;
             }
@@ -230,7 +250,7 @@ class Pool{
     {
         while($this->hasChilds()){
             self::breakpoint("there are still childs");
-            $this->checkChilds();
+            #$this->checkChilds();
             usleep(10000);
         }
     }
