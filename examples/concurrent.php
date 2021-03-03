@@ -10,15 +10,14 @@
 require '../vendor/autoload.php';
 
 use skrtdev\async\Pool;
+use function skrtdev\async\range;
 
 $pool = new Pool();
 
-for ($i=0; $i < 100; $i++) {
-    $pool->parallel(function (int $i) {
-        sleep(1);
-        print("by the child n. $i".PHP_EOL);
-    }, "my nice process name", $i);
-}
+$pool->iterate(range(0, 100), function (int $i) {
+    sleep(1);
+    print("by the child n. $i".PHP_EOL);
+});
 
 print("Out of for, doing some external work...".PHP_EOL);
 

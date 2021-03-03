@@ -2,7 +2,6 @@
 
 namespace skrtdev\async;
 
-use Closure;
 
 class Pool{
 
@@ -19,15 +18,14 @@ class Pool{
 
     public function __construct(?int $max_childs = null, bool $kill_childs = true)
     {
-        if(!extension_loaded("pcntl")){
-            throw new MissingExtensionException("PCNTL Extension is missing in your PHP build");
+        if(!extension_loaded('pcntl')){
+            throw new MissingExtensionException('PCNTL Extension is missing in your PHP build');
         }
         $this->pid = getmypid();
         $this->max_childs = $max_childs ?? (self::getCoresCount() ?? 1) * 10;
         $this->kill_childs = $kill_childs;
 
-        register_tick_function([$this, "tick"]);
-        #pcntl_signal(SIGCHLD, SIG_IGN); // ignores the SIGCHLD signal
+        register_tick_function([$this, 'tick']);
 
         pcntl_async_signals(true);
 
@@ -41,52 +39,33 @@ class Pool{
 
                 foreach ($this->childs as $key => $child) {
                     if($pid === $child){
-                        self::breakpoint("removed child from signal handler");
+                        self::breakpoint('removed child from signal handler');
                         unset($this->childs[$key]);
+                        break;
                     }
                 }
             }
         });
     }
 
-    public function checkChilds(): bool
+
+    public function enqueue(callable $callable, array $args = []): void
     {
-        return false;
-        self::breakpoint("checkChilds()");
-        $removed = 0;
-        foreach ($this->childs as $key => $child) {
-            if(!self::isProcessRunning($child)){
-                unset($this->childs[$key]);
-                $removed++;
-            }
-        }
-        if($removed === 0){
-            self::breakpoint("CheckChilds didn't remove any child");
-            return false;
-        }
-        else{
-            self::breakpoint("CheckChilds removed $removed childs");
-            return true;
-        };
+        $this->queue[] = [$callable, $args];
     }
 
-    public function enqueue(Closure $closure, string $process_title = null, array $args = []): void
+    protected function _parallel(callable $callable, array $args = [])
     {
-        $this->queue[] = [$closure, $process_title, $args];
-    }
-
-    protected function _parallel(Closure $closure, string $process_title = null, array $args = [])
-    {
-        self::breakpoint("started a parallel");
-        self::breakpoint("parallel can be done: current childs: ".count($this->childs)."/".$this->max_childs);
+        self::breakpoint('started a parallel');
+        self::breakpoint('parallel can be done: current childs: '.count($this->childs).'/'.$this->max_childs);
         $pid = pcntl_fork();
         if ($pid == -1) {
-            throw new CouldNotForkException("Pool could not fork");
+            throw new CouldNotForkException('Pool could not fork');
         }
         elseif($pid){
             // we are the parent
             $this->childs[] = $pid;
-            self::breakpoint("child started");
+            self::breakpoint('child started');
             pcntl_wait($status, WNOHANG);
         }
         else{
@@ -95,32 +74,33 @@ class Pool{
             if (!$this->kill_childs) {
                 pcntl_signal(SIGINT, SIG_IGN);
             }
-            if(isset($process_title)){
-                @cli_set_process_title($process_title);
-            }
-            $closure(...$args);
+            $callable(...$args);
             exit;
         }
     }
 
-    public function parallel(Closure $closure, string $process_title = null, ...$args)
+    public function parallel(callable $callable, ...$args)
     {
-        if(count($this->childs) > $this->max_childs/2){
-            #$this->checkChilds();
-        }
         if($this->hasQueue()){
-            self::breakpoint("resolving queue before parallel()");
+            self::breakpoint('resolving queue before parallel()');
             $this->resolveQueue();
             if($this->hasQueue()){
-                self::breakpoint("enqueueing because there is a queue");
-                return $this->enqueue($closure, $process_title, $args);
+                self::breakpoint('enqueueing because there is a queue');
+                return $this->enqueue($callable, $args);
             }
         }
         elseif(count($this->childs) > $this->max_childs){
-            self::breakpoint("enqueueing because of max reached (tried checkChilds but no results)");
-            return $this->enqueue($closure, $process_title, $args);
+            self::breakpoint('enqueueing because of max reached');
+            return $this->enqueue($callable, $args);
         }
-        return $this->_parallel($closure, $process_title, $args);
+        return $this->_parallel($callable, $args);
+    }
+
+    public function iterate(iterable $iterable, callable $callable): void
+    {
+        foreach ($iterable as $value) {
+            $this->parallel($callable, $value);
+        }
     }
 
     public function resolveQueue(): void
@@ -128,30 +108,25 @@ class Pool{
         if($this->is_resolving_queue) return;
 
         if(count($this->childs) >= $this->max_childs){
-            self::breakpoint("resolveQueue() -> too many childs, trying to remove...".PHP_EOL."check childs from resolveQueue()");
-            if(true || !$this->checkChilds()){
-                self::breakpoint("resolveQueue() exited because of too many childs");
-                return;
-            }
+            self::breakpoint('resolveQueue() exited because of too many childs');
+            return;
         }
 
         $this->is_resolving_queue = true;
 
-        foreach ($this->queue as $key => $closure) {
+        foreach ($this->queue as $key => $callable) {
             if(count($this->childs) < $this->max_childs){
                 unset($this->queue[$key]);
                 self::breakpoint("resolveQueue() is resolving n. $key");
-                $this->_parallel(...$closure);
+                $this->_parallel(...$callable);
             }
             else{
-                self::breakpoint("resolveQueue() can't resolve, too many childs");
+                self::breakpoint('resolveQueue() can\'t resolve, too many childs');
                 break;
-                self::breakpoint("check childs from resolveQueue()");
-                $this->checkChilds();
             }
         }
         if(empty($this->queue)){
-            self::breakpoint("queue is empty");
+            self::breakpoint('queue is empty');
         }
 
         $this->is_resolving_queue = false;
@@ -162,22 +137,16 @@ class Pool{
     {
         if($this->is_parent){
             $this->need_tick = false;
-            self::breakpoint("triggered destructor");
+            self::breakpoint('triggered destructor');
             $this->wait();
         }
     }
 
     public static function getCoresCount(): ?int
     {
-        if(isset(self::$cores_count) && self::$cores_count === 0) return null;
+        if(isset(self::$cores_count)) return self::$cores_count === 0 ? null : self::$cores_count;
 
-        if (defined('PHP_WINDOWS_VERSION_MAJOR')){
-    		$str = trim(shell_exec('wmic cpu get NumberOfCores 2>&1'));
-    		if (!preg_match('/(\d+)/', $str, $matches)) {
-    			$cores_count = null;
-    		}
-    		$cores_count = (int) $matches[1];
-    	}
+
     	$ret = @shell_exec('nproc 2> /dev/null');
     	if (is_string($ret)) {
     		$ret = trim($ret);
@@ -199,19 +168,12 @@ class Pool{
 
     public static function breakpoint($value){
         return;
-        usleep(5000);
         print($value.PHP_EOL);
-    }
-
-    public static function isProcessRunning($pid): bool
-    {
-        return posix_getpgid($pid) !== false;
     }
 
     public function tick()
     {
         if($this->is_parent && $this->need_tick && self::$last_tick !== time()){
-            #print("tick".PHP_EOL);
             self::$last_tick = time();
             if(!$this->is_resolving_queue) $this->resolveQueue();
         }
@@ -240,7 +202,7 @@ class Pool{
     public function waitQueue(): void
     {
         while($this->hasQueue()){
-            self::breakpoint("queue is not empty");
+            self::breakpoint('queue is not empty');
             $this->resolveQueue();
             usleep(10000);
         }
@@ -249,8 +211,7 @@ class Pool{
     public function waitChilds(): void
     {
         while($this->hasChilds()){
-            self::breakpoint("there are still childs");
-            #$this->checkChilds();
+            self::breakpoint('there are still childs');
             usleep(10000);
         }
     }

@@ -3,17 +3,17 @@
 require '../vendor/autoload.php';
 
 use skrtdev\async\Pool;
+use function skrtdev\async\range;
 
 $pool = new Pool();
 
-for ($i=0; $i < 10; $i++) {
-    $pool->parallel(function () use ($i) {
-        for ($ii=0; $ii < 10; $ii++) {
-            sleep(1);
-            print("by the child n. $i - $ii".PHP_EOL);
-        }
-    });
-}
+$pool->iterate(range(0, 10), function ($i) {
+    for ($ii=0; $ii < 10; $ii++) {
+        sleep(1);
+        print("by the child n. $i - $ii".PHP_EOL);
+    }
+
+});
 
 while(true){
     sleep(1);
