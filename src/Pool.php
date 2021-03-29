@@ -48,6 +48,26 @@ class Pool{
         });
     }
 
+    protected function checkChilds(): bool
+    {
+        self::breakpoint("checkChilds()");
+        $removed = 0;
+        foreach ($this->childs as $key => $child) {
+            if(!self::isProcessRunning($child)){
+                unset($this->childs[$key]);
+                $removed++;
+            }
+        }
+        if($removed === 0){
+            self::breakpoint("CheckChilds didn't remove any child");
+            return false;
+        }
+        else{
+            self::breakpoint("CheckChilds removed $removed childs");
+            return true;
+        };
+    }
+
 
     public function enqueue(callable $callable, array $args = []): void
     {
@@ -108,8 +128,10 @@ class Pool{
         if($this->is_resolving_queue) return;
 
         if(count($this->childs) >= $this->max_childs){
-            self::breakpoint('resolveQueue() exited because of too many childs');
-            return;
+            if(!$this->checkChilds()) {
+                self::breakpoint('resolveQueue() exited because of too many childs');
+                return;
+            }
         }
 
         $this->is_resolving_queue = true;
@@ -135,7 +157,8 @@ class Pool{
 
     public function __destruct()
     {
-        if($this->is_parent){
+        // pid check added because of an unidentified bug
+        if($this->is_parent && $this->pid === getmypid()){
             $this->need_tick = false;
             self::breakpoint('triggered destructor');
             $this->wait();
@@ -147,20 +170,20 @@ class Pool{
         if(isset(self::$cores_count)) return self::$cores_count === 0 ? null : self::$cores_count;
 
 
-    	$ret = @shell_exec('nproc 2> /dev/null');
-    	if (is_string($ret)) {
-    		$ret = trim($ret);
-    		if (false !== ($tmp = filter_var($ret, FILTER_VALIDATE_INT))){
-    			$cores_count = $tmp;
-    		}
-    	}
-    	if (is_readable('/proc/cpuinfo 2> /dev/null')) {
-    		$cpuinfo = file_get_contents('/proc/cpuinfo');
-    		$count = substr_count($cpuinfo, 'processor');
-    		if ($count > 0) {
-    			$cores_count = $count;
-    		}
-    	}
+        $ret = @shell_exec('nproc 2> /dev/null');
+        if (is_string($ret)) {
+            $ret = trim($ret);
+            if (false !== ($tmp = filter_var($ret, FILTER_VALIDATE_INT))){
+                $cores_count = $tmp;
+            }
+        }
+        if (is_readable('/proc/cpuinfo 2> /dev/null')) {
+            $cpuinfo = file_get_contents('/proc/cpuinfo');
+            $count = substr_count($cpuinfo, 'processor');
+            if ($count > 0) {
+                $cores_count = $count;
+            }
+        }
 
         self::$cores_count = $cores_count ?? 0;
         return $cores_count ?? null;
@@ -210,8 +233,12 @@ class Pool{
 
     public function waitChilds(): void
     {
+        $i = 0;
         while($this->hasChilds()){
             self::breakpoint('there are still childs');
+            if($i % 100 === 0){
+                $this->checkChilds();
+            }
             usleep(10000);
         }
     }
@@ -221,6 +248,12 @@ class Pool{
         $this->waitQueue();
         $this->waitChilds();
     }
+
+    public static function isProcessRunning(int $pid): bool
+    {
+        return posix_getpgid($pid) !== false;
+    }
+
 }
 
 
