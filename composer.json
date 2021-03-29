@@ -17,7 +17,8 @@
             "skrtdev\\async\\": "src/"
         },
         "files":[
-            "src/range.php"
+            "src/range.php",
+            "src/helpers.php"
         ]
     }
 }

@@ -16,6 +16,8 @@ class Pool{
     private bool $is_resolving_queue = false;
     private bool $need_tick = true;
 
+    protected static self $default_pool;
+
     public function __construct(?int $max_childs = null, bool $kill_childs = true)
     {
         if(!extension_loaded('pcntl')){
@@ -252,6 +254,11 @@ class Pool{
     public static function isProcessRunning(int $pid): bool
     {
         return posix_getpgid($pid) !== false;
+    }
+
+    public static function getDefaultPool(): self
+    {
+        return static::$default_pool ??= new static();
     }
 
 }
