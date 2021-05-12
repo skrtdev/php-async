@@ -2,6 +2,7 @@
 
 namespace skrtdev\async;
 
+use Throwable;
 
 class Pool{
 
@@ -18,10 +19,16 @@ class Pool{
 
     protected static self $default_pool;
 
+    /**
+     * @throws MissingExtensionException
+     */
     public function __construct(?int $max_childs = null, bool $kill_childs = true)
     {
         if(!extension_loaded('pcntl')){
             throw new MissingExtensionException('PCNTL Extension is missing in your PHP build');
+        }
+        if(!extension_loaded('posix')){
+            throw new MissingExtensionException('POSIX Extension is missing in your PHP build');
         }
         $this->pid = getmypid();
         $this->max_childs = $max_childs ?? (self::getCoresCount() ?? 1) * 10;
@@ -31,7 +38,7 @@ class Pool{
 
         pcntl_async_signals(true);
 
-        pcntl_signal(SIGCHLD, function ($signo, $status) {
+        pcntl_signal(SIGCHLD, function () {
             while (true) {
                 $pid = pcntl_waitpid(-1, $processState, WNOHANG | WUNTRACED);
 
@@ -67,7 +74,7 @@ class Pool{
         else{
             self::breakpoint("CheckChilds removed $removed childs");
             return true;
-        };
+        }
     }
 
 
@@ -76,6 +83,9 @@ class Pool{
         $this->queue[] = [$callable, $args];
     }
 
+    /**
+     * @throws CouldNotForkException
+     */
     protected function _parallel(callable $callable, array $args = [])
     {
         self::breakpoint('started a parallel');
@@ -96,11 +106,19 @@ class Pool{
             if (!$this->kill_childs) {
                 pcntl_signal(SIGINT, SIG_IGN);
             }
-            $callable(...$args);
+            try {
+                $callable(...$args);
+            }
+            catch(Throwable $e){
+                echo "Uncaught $e";
+            }
             exit;
         }
     }
 
+    /**
+     * @throws CouldNotForkException
+     */
     public function parallel(callable $callable, ...$args)
     {
         if($this->hasQueue()){
@@ -262,6 +280,3 @@ class Pool{
     }
 
 }
-
-
-?>
